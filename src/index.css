@@ -1,0 +1,261 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Dark theme - CodeAutoSpy */
+    --background: 240 20% 4%;
+    --background-secondary: 240 15% 7%;
+    --background-tertiary: 240 12% 10%;
+    
+    --foreground: 0 0% 98%;
+    --foreground-muted: 240 5% 64%;
+    
+    --card: 240 15% 8%;
+    --card-foreground: 0 0% 98%;
+    --card-border: 240 10% 15%;
+    
+    --popover: 240 15% 8%;
+    --popover-foreground: 0 0% 98%;
+    
+    --primary: 217 91% 60%;
+    --primary-foreground: 0 0% 100%;
+    --primary-glow: 217 91% 60%;
+    
+    --secondary: 262 83% 58%;
+    --secondary-foreground: 0 0% 100%;
+    
+    --success: 160 84% 39%;
+    --success-foreground: 0 0% 100%;
+    
+    --warning: 45 93% 47%;
+    --warning-foreground: 0 0% 0%;
+    
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    
+    --muted: 240 10% 14%;
+    --muted-foreground: 240 5% 55%;
+    
+    --accent: 240 10% 14%;
+    --accent-foreground: 0 0% 98%;
+    
+    --border: 240 10% 16%;
+    --input: 240 10% 14%;
+    --ring: 217 91% 60%;
+    
+    --radius: 0.75rem;
+    
+    /* Gradients */
+    --gradient-primary: linear-gradient(135deg, hsl(217 91% 60%) 0%, hsl(262 83% 58%) 100%);
+    --gradient-success: linear-gradient(135deg, hsl(160 84% 39%) 0%, hsl(172 66% 50%) 100%);
+    --gradient-warning: linear-gradient(135deg, hsl(45 93% 47%) 0%, hsl(35 91% 53%) 100%);
+    --gradient-danger: linear-gradient(135deg, hsl(0 84% 60%) 0%, hsl(350 80% 55%) 100%);
+    --gradient-purple: linear-gradient(135deg, hsl(262 83% 58%) 0%, hsl(280 75% 60%) 100%);
+    --gradient-dark: linear-gradient(180deg, hsl(240 15% 7%) 0%, hsl(240 20% 4%) 100%);
+    
+    /* Glass effects */
+    --glass-background: hsla(240, 15%, 8%, 0.8);
+    --glass-border: hsla(240, 10%, 20%, 0.5);
+    --glass-shadow: 0 8px 32px hsla(0, 0%, 0%, 0.4);
+    
+    /* Sidebar */
+    --sidebar-background: 240 15% 6%;
+    --sidebar-foreground: 0 0% 90%;
+    --sidebar-primary: 217 91% 60%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 10% 12%;
+    --sidebar-accent-foreground: 0 0% 98%;
+    --sidebar-border: 240 10% 14%;
+    --sidebar-ring: 217 91% 60%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+  
+  code, pre {
+    font-family: 'JetBrains Mono', monospace;
+  }
+}
+
+@layer components {
+  /* Glass Card */
+  .glass-card {
+    @apply relative overflow-hidden rounded-xl;
+    background: var(--glass-background);
+    backdrop-filter: blur(20px);
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--glass-shadow);
+  }
+  
+  .glass-card::before {
+    content: '';
+    @apply absolute inset-0 pointer-events-none;
+    background: linear-gradient(135deg, hsla(0, 0%, 100%, 0.05) 0%, transparent 50%);
+  }
+  
+  /* Stat Card Variants */
+  .stat-card-primary {
+    @apply glass-card;
+    border-color: hsla(217, 91%, 60%, 0.2);
+  }
+  
+  .stat-card-primary::after {
+    content: '';
+    @apply absolute -top-12 -right-12 w-32 h-32 rounded-full opacity-20 pointer-events-none;
+    background: var(--gradient-primary);
+    filter: blur(40px);
+  }
+  
+  .stat-card-success {
+    @apply glass-card;
+    border-color: hsla(160, 84%, 39%, 0.2);
+  }
+  
+  .stat-card-success::after {
+    content: '';
+    @apply absolute -top-12 -right-12 w-32 h-32 rounded-full opacity-20 pointer-events-none;
+    background: var(--gradient-success);
+    filter: blur(40px);
+  }
+  
+  .stat-card-danger {
+    @apply glass-card;
+    border-color: hsla(0, 84%, 60%, 0.2);
+  }
+  
+  .stat-card-danger::after {
+    content: '';
+    @apply absolute -top-12 -right-12 w-32 h-32 rounded-full opacity-20 pointer-events-none;
+    background: var(--gradient-danger);
+    filter: blur(40px);
+  }
+  
+  .stat-card-warning {
+    @apply glass-card;
+    border-color: hsla(45, 93%, 47%, 0.2);
+  }
+  
+  .stat-card-warning::after {
+    content: '';
+    @apply absolute -top-12 -right-12 w-32 h-32 rounded-full opacity-20 pointer-events-none;
+    background: var(--gradient-warning);
+    filter: blur(40px);
+  }
+  
+  /* Gradient Text */
+  .gradient-text {
+    @apply bg-clip-text text-transparent;
+    background-image: var(--gradient-primary);
+  }
+  
+  /* Glow Effects */
+  .glow-primary {
+    box-shadow: 0 0 20px hsla(217, 91%, 60%, 0.3);
+  }
+  
+  .glow-success {
+    box-shadow: 0 0 20px hsla(160, 84%, 39%, 0.3);
+  }
+  
+  /* Sidebar Active Item */
+  .sidebar-item-active {
+    @apply relative;
+    background: linear-gradient(90deg, hsla(217, 91%, 60%, 0.15) 0%, transparent 100%);
+  }
+  
+  .sidebar-item-active::before {
+    content: '';
+    @apply absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 rounded-r-full;
+    background: var(--gradient-primary);
+  }
+  
+  /* Code Block */
+  .code-block {
+    @apply rounded-lg p-4 text-sm overflow-x-auto;
+    background: hsl(240 20% 6%);
+    border: 1px solid hsl(240 10% 14%);
+  }
+  
+  /* Status Badges */
+  .badge-fixed {
+    @apply bg-success/20 text-success border border-success/30;
+  }
+  
+  .badge-failed {
+    @apply bg-destructive/20 text-destructive border border-destructive/30;
+  }
+  
+  .badge-analyzing {
+    @apply bg-warning/20 text-warning border border-warning/30;
+  }
+  
+  .badge-detected {
+    @apply bg-primary/20 text-primary border border-primary/30;
+  }
+  
+  .badge-fixing {
+    @apply bg-secondary/20 text-secondary border border-secondary/30;
+  }
+  
+  /* Scrollbar */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  
+  ::-webkit-scrollbar-track {
+    background: hsl(240 20% 4%);
+  }
+  
+  ::-webkit-scrollbar-thumb {
+    background: hsl(240 10% 20%);
+    border-radius: 4px;
+  }
+  
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(240 10% 30%);
+  }
+}
+
+@layer utilities {
+  /* Animation utilities */
+  .animate-fade-in {
+    animation: fadeIn 0.3s ease-out forwards;
+  }
+  
+  .animate-slide-up {
+    animation: slideUp 0.3s ease-out forwards;
+  }
+  
+  .animate-pulse-slow {
+    animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+  
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  
+  @keyframes slideUp {
+    from { 
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to { 
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+}
