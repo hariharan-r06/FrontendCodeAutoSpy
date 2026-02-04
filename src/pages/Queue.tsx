@@ -1,12 +1,14 @@
 import { useEffect, useState, useCallback } from 'react';
-import { 
-  PlayCircle, 
-  Clock, 
-  CheckCircle2, 
+import {
+  PlayCircle,
+  Clock,
+  CheckCircle2,
   XCircle,
   RefreshCw,
   Trash2,
   AlertTriangle,
+  Wifi,
+  WifiOff,
 } from 'lucide-react';
 import { Layout } from '@/components/layout/Layout';
 import { StatCard } from '@/components/ui/stat-card';
@@ -16,30 +18,26 @@ import { Button } from '@/components/ui/button';
 import { getQueueStats, retryFailedJobs, cleanQueue, QueueStats } from '@/lib/api';
 import { toast } from 'sonner';
 
-const mockQueueStats: QueueStats = {
-  counts: { waiting: 3, active: 1, completed: 245, failed: 8 },
-  active: 1,
-  waiting: 3,
-  failed: 8,
-  recentFailed: [
-    { id: 'job1', data: { repo: 'acme/frontend', branch: 'main' }, failedReason: 'API timeout after 30s', attemptsMade: 3 },
-    { id: 'job2', data: { repo: 'acme/backend', branch: 'develop' }, failedReason: 'Rate limit exceeded', attemptsMade: 2 },
-    { id: 'job3', data: { repo: 'acme/mobile', branch: 'feature/ui' }, failedReason: 'Invalid response from AI service', attemptsMade: 3 },
-  ],
-};
+const REFRESH_INTERVAL = 5000; // 5 seconds for queue (faster updates)
 
 export default function Queue() {
   const [stats, setStats] = useState<QueueStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [retrying, setRetrying] = useState(false);
   const [cleaning, setCleaning] = useState(false);
+  const [isConnected, setIsConnected] = useState(true);
 
   const fetchStats = useCallback(async () => {
     try {
       const data = await getQueueStats();
       setStats(data);
-    } catch {
-      setStats(mockQueueStats);
+      setError(null);
+      setIsConnected(true);
+    } catch (err) {
+      setError('Failed to connect to backend');
+      setIsConnected(false);
+      console.error('Queue fetch error:', err);
     } finally {
       setLoading(false);
     }
@@ -47,7 +45,7 @@ export default function Queue() {
 
   useEffect(() => {
     fetchStats();
-    const interval = setInterval(fetchStats, 5000);
+    const interval = setInterval(fetchStats, REFRESH_INTERVAL);
     return () => clearInterval(interval);
   }, [fetchStats]);
 
@@ -85,7 +83,23 @@ export default function Queue() {
     );
   }
 
-  const data = stats || mockQueueStats;
+  if (error || !stats) {
+    return (
+      <Layout>
+        <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-4">
+          <WifiOff className="w-16 h-16 text-yellow-500" />
+          <h2 className="text-xl font-semibold text-foreground">Connection Error</h2>
+          <p className="text-muted-foreground text-center max-w-md">
+            {error || 'Unable to fetch queue data from backend.'}
+          </p>
+          <Button onClick={fetchStats} variant="outline">
+            <RefreshCw className="w-4 h-4 mr-2" />
+            Retry
+          </Button>
+        </div>
+      </Layout>
+    );
+  }
 
   return (
     <Layout>
@@ -97,17 +111,17 @@ export default function Queue() {
             <p className="text-muted-foreground mt-1">Monitor and manage the job queue</p>
           </div>
           <div className="flex gap-2">
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               onClick={handleRetryFailed}
-              disabled={retrying || data.failed === 0}
+              disabled={retrying || stats.failed === 0}
               className="gap-2"
             >
               {retrying ? <LoadingSpinner size="sm" /> : <RefreshCw className="w-4 h-4" />}
               Retry Failed
             </Button>
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               onClick={handleCleanQueue}
               disabled={cleaning}
               className="gap-2"
@@ -120,53 +134,63 @@ export default function Queue() {
 
         {/* Auto-refresh indicator */}
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <div className="w-2 h-2 rounded-full bg-success animate-pulse" />
-          Auto-refreshing every 5 seconds
+          {isConnected ? (
+            <>
+              <Wifi className="w-4 h-4 text-green-500" />
+              <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+              <span>Connected - Auto-refreshing every {REFRESH_INTERVAL / 1000} seconds</span>
+            </>
+          ) : (
+            <>
+              <WifiOff className="w-4 h-4 text-red-500" />
+              <span className="text-red-500">Disconnected - Retrying...</span>
+            </>
+          )}
         </div>
 
         {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <StatCard
             title="Active"
-            value={data.active}
+            value={stats.active}
             icon={PlayCircle}
             variant="primary"
           />
           <StatCard
             title="Waiting"
-            value={data.waiting}
+            value={stats.waiting}
             icon={Clock}
             variant="warning"
           />
           <StatCard
             title="Completed"
-            value={data.counts.completed}
+            value={stats.counts.completed}
             icon={CheckCircle2}
             variant="success"
           />
           <StatCard
             title="Failed"
-            value={data.failed}
+            value={stats.failed}
             icon={XCircle}
             variant="danger"
           />
         </div>
 
         {/* Active Jobs */}
-        {data.active > 0 && (
+        {stats.active > 0 && (
           <div className="glass-card p-6">
             <h3 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
               <PlayCircle className="w-5 h-5 text-primary" />
-              Active Jobs ({data.active})
+              Active Jobs ({stats.active})
             </h3>
             <div className="space-y-3">
-              {Array.from({ length: data.active }).map((_, i) => (
+              {Array.from({ length: stats.active }).map((_, i) => (
                 <div key={i} className="flex items-center gap-4 p-4 bg-muted/30 rounded-lg">
                   <LoadingSpinner size="sm" />
                   <div className="flex-1">
                     <span className="text-sm font-medium text-foreground">Processing fix attempt...</span>
                     <div className="w-full bg-muted rounded-full h-2 mt-2">
-                      <div 
+                      <div
                         className="bg-gradient-primary h-2 rounded-full animate-pulse"
                         style={{ width: '60%' }}
                       />
@@ -179,35 +203,35 @@ export default function Queue() {
         )}
 
         {/* Waiting Jobs */}
-        {data.waiting > 0 && (
+        {stats.waiting > 0 && (
           <div className="glass-card p-6">
             <h3 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
-              <Clock className="w-5 h-5 text-warning" />
-              Waiting Jobs ({data.waiting})
+              <Clock className="w-5 h-5 text-yellow-500" />
+              Waiting Jobs ({stats.waiting})
             </h3>
             <div className="text-sm text-muted-foreground">
-              {data.waiting} job{data.waiting > 1 ? 's' : ''} waiting in queue
+              {stats.waiting} job{stats.waiting > 1 ? 's' : ''} waiting in queue
             </div>
           </div>
         )}
 
         {/* Failed Jobs */}
-        {data.recentFailed && data.recentFailed.length > 0 ? (
+        {stats.recentFailed && stats.recentFailed.length > 0 ? (
           <div className="glass-card overflow-hidden">
             <div className="p-4 border-b border-border flex items-center gap-2">
-              <AlertTriangle className="w-5 h-5 text-destructive" />
-              <h3 className="text-lg font-semibold text-foreground">Failed Jobs ({data.recentFailed.length})</h3>
+              <AlertTriangle className="w-5 h-5 text-red-500" />
+              <h3 className="text-lg font-semibold text-foreground">Failed Jobs ({stats.recentFailed.length})</h3>
             </div>
             <div className="divide-y divide-border/50">
-              {data.recentFailed.map((job) => (
+              {stats.recentFailed.map((job) => (
                 <div key={job.id} className="p-4 hover:bg-muted/20 transition-colors">
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex-1">
                       <span className="text-sm font-medium text-foreground">Job #{job.id}</span>
-                      <p className="text-sm text-destructive mt-1">{job.failedReason}</p>
-                      {job.data && typeof job.data === 'object' && 'repo' in job.data && (
+                      <p className="text-sm text-red-500 mt-1">{job.failedReason}</p>
+                      {job.data && typeof job.data === 'object' && (
                         <p className="text-xs text-muted-foreground mt-1">
-                          Repository: {String(job.data.repo)}
+                          {JSON.stringify(job.data).slice(0, 100)}...
                         </p>
                       )}
                     </div>
@@ -221,9 +245,9 @@ export default function Queue() {
             </div>
           </div>
         ) : (
-          <EmptyState 
+          <EmptyState
             icon={CheckCircle2}
-            title="No failed jobs" 
+            title="No failed jobs"
             description="All jobs are running smoothly!"
           />
         )}

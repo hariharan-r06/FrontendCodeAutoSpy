@@ -1,15 +1,16 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { format } from 'date-fns';
-import { 
-  ArrowLeft, 
-  GitBranch, 
-  GitCommit, 
-  FileCode, 
+import {
+  ArrowLeft,
+  GitBranch,
+  GitCommit,
+  FileCode,
   ExternalLink,
   Clock,
   CheckCircle2,
   AlertTriangle,
+  RefreshCw,
 } from 'lucide-react';
 import { Layout } from '@/components/layout/Layout';
 import { StatusBadge } from '@/components/ui/status-badge';
@@ -19,73 +20,42 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { Button } from '@/components/ui/button';
 import { getEvent, Event, FixAttempt } from '@/lib/api';
 
-const mockEvent: Event = {
-  id: '1',
-  repoFullName: 'acme/frontend',
-  repoOwner: 'acme',
-  repoName: 'frontend',
-  branch: 'main',
-  commitSha: 'abc123def456789',
-  status: 'FIXED',
-  errorType: 'SyntaxError',
-  errorMessage: 'Unexpected token \')\'. Expected an identifier or keyword.',
-  filePath: 'src/components/Dashboard.tsx',
-  lineNumber: 42,
-  prUrl: 'https://github.com/acme/frontend/pull/123',
-  confidence: 0.95,
-  createdAt: new Date(Date.now() - 3600000).toISOString(),
-  updatedAt: new Date().toISOString(),
-  fixAttempts: [
-    {
-      id: 'fix1',
-      failureEventId: '1',
-      originalCode: `const handleClick = (event) => {
-  console.log(event.target.value)
-  setData(prevData => {
-    ...prevData,
-    clicked: true
-  });
-};`,
-      fixedCode: `const handleClick = (event) => {
-  console.log(event.target.value);
-  setData(prevData => ({
-    ...prevData,
-    clicked: true
-  }));
-};`,
-      diffSummary: 'Added missing parentheses around object literal in arrow function return and semicolons',
-      confidence: 0.95,
-      status: 'success',
-      prUrl: 'https://github.com/acme/frontend/pull/123',
-      createdAt: new Date(Date.now() - 1800000).toISOString(),
-    },
-  ],
-};
+const REFRESH_INTERVAL = 10000; // 10 seconds for real-time updates
 
 export default function EventDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [event, setEvent] = useState<Event | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const fetchEvent = useCallback(async (showRefresh = false) => {
+    if (!id) return;
+
+    try {
+      if (showRefresh) setIsRefreshing(true);
+      const data = await getEvent(id);
+      setEvent(data);
+      setError(null);
+    } catch (err) {
+      setError('Failed to load event details. Make sure the backend is running.');
+      console.error('Event fetch error:', err);
+    } finally {
+      setLoading(false);
+      setIsRefreshing(false);
+    }
+  }, [id]);
 
   useEffect(() => {
-    const fetchEvent = async () => {
-      if (!id) return;
-      
-      setLoading(true);
-      try {
-        const data = await getEvent(id);
-        setEvent(data);
-      } catch {
-        // Use mock data
-        setEvent(mockEvent);
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchEvent();
-  }, [id]);
+    const interval = setInterval(() => fetchEvent(false), REFRESH_INTERVAL);
+    return () => clearInterval(interval);
+  }, [fetchEvent]);
+
+  const handleManualRefresh = () => {
+    fetchEvent(true);
+  };
 
   if (loading) {
     return (
@@ -95,16 +65,32 @@ export default function EventDetail() {
     );
   }
 
-  if (!event) {
+  if (error || !event) {
     return (
       <Layout>
-        <EmptyState 
-          title="Event not found" 
-          description="The event you're looking for doesn't exist."
-          action={
-            <Button onClick={() => navigate('/events')}>Back to Events</Button>
-          }
-        />
+        <div className="space-y-6">
+          <button
+            onClick={() => navigate('/events')}
+            className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span className="text-sm">Back to Events</span>
+          </button>
+          <EmptyState
+            icon={AlertTriangle}
+            title="Event not found"
+            description={error || "The event you're looking for doesn't exist or cannot be loaded."}
+            action={
+              <div className="flex gap-2">
+                <Button onClick={handleManualRefresh} variant="outline">
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  Retry
+                </Button>
+                <Button onClick={() => navigate('/events')}>Back to Events</Button>
+              </div>
+            }
+          />
+        </div>
       </Layout>
     );
   }
@@ -113,13 +99,24 @@ export default function EventDetail() {
     <Layout>
       <div className="space-y-6">
         {/* Back Button */}
-        <button 
-          onClick={() => navigate('/events')}
-          className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          <span className="text-sm">Back to Events</span>
-        </button>
+        <div className="flex items-center justify-between">
+          <button
+            onClick={() => navigate('/events')}
+            className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span className="text-sm">Back to Events</span>
+          </button>
+          <Button
+            onClick={handleManualRefresh}
+            variant="outline"
+            size="sm"
+            disabled={isRefreshing}
+          >
+            <RefreshCw className={`w-4 h-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
+        </div>
 
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -132,7 +129,7 @@ export default function EventDetail() {
               </span>
               <span className="flex items-center gap-1">
                 <GitCommit className="w-4 h-4" />
-                {event.commitSha.slice(0, 7)}
+                {event.commitSha?.slice(0, 7) || 'N/A'}
               </span>
             </div>
           </div>
@@ -143,13 +140,13 @@ export default function EventDetail() {
         <div className="glass-card p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <div>
             <span className="text-xs text-muted-foreground uppercase tracking-wider">Error Type</span>
-            <p className="text-sm font-medium text-foreground mt-1">{event.errorType}</p>
+            <p className="text-sm font-medium text-foreground mt-1">{event.errorType || 'Unknown'}</p>
           </div>
           <div>
             <span className="text-xs text-muted-foreground uppercase tracking-wider">File</span>
             <p className="text-sm font-medium text-foreground mt-1 flex items-center gap-1">
               <FileCode className="w-4 h-4" />
-              {event.filePath}:{event.lineNumber}
+              {event.filePath ? `${event.filePath}:${event.lineNumber}` : 'Not specified'}
             </p>
           </div>
           <div>
@@ -162,8 +159,8 @@ export default function EventDetail() {
           {event.prUrl && (
             <div>
               <span className="text-xs text-muted-foreground uppercase tracking-wider">Pull Request</span>
-              <Link 
-                to={event.prUrl} 
+              <Link
+                to={event.prUrl}
                 target="_blank"
                 className="text-sm font-medium text-primary mt-1 flex items-center gap-1 hover:underline"
               >
@@ -177,30 +174,31 @@ export default function EventDetail() {
         {/* Error Details */}
         <div className="glass-card p-6">
           <h3 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
-            <AlertTriangle className="w-5 h-5 text-destructive" />
+            <AlertTriangle className="w-5 h-5 text-red-500" />
             Error Details
           </h3>
-          <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-4">
-            <p className="text-sm text-foreground font-mono">{event.errorMessage}</p>
+          <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4">
+            <p className="text-sm text-foreground font-mono whitespace-pre-wrap">
+              {event.errorMessage || 'No error message available'}
+            </p>
           </div>
         </div>
 
         {/* Fix Attempts */}
-        {event.fixAttempts && event.fixAttempts.length > 0 && (
+        {event.fixAttempts && event.fixAttempts.length > 0 ? (
           <div className="space-y-4">
-            <h3 className="text-lg font-semibold text-foreground">Fix Attempts</h3>
-            
+            <h3 className="text-lg font-semibold text-foreground">Fix Attempts ({event.fixAttempts.length})</h3>
+
             {event.fixAttempts.map((fix: FixAttempt, index: number) => (
               <div key={fix.id} className="glass-card p-6 space-y-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                      fix.status === 'success' ? 'bg-success/20 text-success' : 
-                      fix.status === 'failed' ? 'bg-destructive/20 text-destructive' :
-                      'bg-warning/20 text-warning'
-                    }`}>
-                      {fix.status === 'success' ? <CheckCircle2 className="w-4 h-4" /> : 
-                       <AlertTriangle className="w-4 h-4" />}
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center ${fix.status === 'success' ? 'bg-green-500/20 text-green-500' :
+                        fix.status === 'failed' ? 'bg-red-500/20 text-red-500' :
+                          'bg-yellow-500/20 text-yellow-500'
+                      }`}>
+                      {fix.status === 'success' ? <CheckCircle2 className="w-4 h-4" /> :
+                        <AlertTriangle className="w-4 h-4" />}
                     </div>
                     <div>
                       <span className="text-sm font-medium text-foreground">Attempt #{index + 1}</span>
@@ -217,8 +215,8 @@ export default function EventDetail() {
                       </span>
                     </div>
                     {fix.prUrl && (
-                      <Link 
-                        to={fix.prUrl} 
+                      <Link
+                        to={fix.prUrl}
                         target="_blank"
                         className="text-primary hover:underline text-sm flex items-center gap-1"
                       >
@@ -236,20 +234,30 @@ export default function EventDetail() {
                   </div>
                 )}
 
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                  <CodeBlock
-                    code={fix.originalCode}
-                    title="Original Code"
-                    variant="removed"
-                  />
-                  <CodeBlock
-                    code={fix.fixedCode}
-                    title="Fixed Code"
-                    variant="added"
-                  />
-                </div>
+                {(fix.originalCode || fix.fixedCode) && (
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    <CodeBlock
+                      code={fix.originalCode || 'No original code available'}
+                      title="Original Code"
+                      variant="removed"
+                    />
+                    <CodeBlock
+                      code={fix.fixedCode || 'No fixed code available'}
+                      title="Fixed Code"
+                      variant="added"
+                    />
+                  </div>
+                )}
               </div>
             ))}
+          </div>
+        ) : (
+          <div className="glass-card p-8 text-center">
+            <Clock className="w-12 h-12 mx-auto mb-4 text-muted-foreground opacity-50" />
+            <h3 className="text-lg font-semibold text-foreground mb-2">No fix attempts yet</h3>
+            <p className="text-muted-foreground">
+              The system is analyzing this error and will generate a fix soon.
+            </p>
           </div>
         )}
 
@@ -268,13 +276,12 @@ export default function EventDetail() {
             </div>
             {event.fixAttempts?.map((fix, idx) => (
               <div key={fix.id} className="flex items-start gap-3">
-                <div className={`w-2 h-2 rounded-full mt-2 ${
-                  fix.status === 'success' ? 'bg-success' : 
-                  fix.status === 'failed' ? 'bg-destructive' : 'bg-warning'
-                }`} />
+                <div className={`w-2 h-2 rounded-full mt-2 ${fix.status === 'success' ? 'bg-green-500' :
+                    fix.status === 'failed' ? 'bg-red-500' : 'bg-yellow-500'
+                  }`} />
                 <div>
                   <span className="text-sm font-medium text-foreground">
-                    Fix Attempt #{idx + 1} - {fix.status === 'success' ? 'Successful' : 'Failed'}
+                    Fix Attempt #{idx + 1} - {fix.status === 'success' ? 'Successful' : fix.status === 'failed' ? 'Failed' : 'Pending'}
                   </span>
                   <span className="block text-xs text-muted-foreground">
                     {format(new Date(fix.createdAt), 'MMM d, yyyy h:mm:ss a')}
@@ -283,13 +290,12 @@ export default function EventDetail() {
               </div>
             ))}
             <div className="flex items-start gap-3">
-              <div className={`w-2 h-2 rounded-full mt-2 ${
-                event.status === 'FIXED' ? 'bg-success' : 
-                event.status === 'FAILED' ? 'bg-destructive' : 'bg-warning'
-              }`} />
+              <div className={`w-2 h-2 rounded-full mt-2 ${event.status === 'FIXED' ? 'bg-green-500' :
+                  event.status === 'FAILED' ? 'bg-red-500' : 'bg-yellow-500'
+                }`} />
               <div>
                 <span className="text-sm font-medium text-foreground">
-                  Status: {event.status}
+                  Current Status: {event.status}
                 </span>
                 <span className="block text-xs text-muted-foreground">
                   {format(new Date(event.updatedAt), 'MMM d, yyyy h:mm:ss a')}
@@ -297,6 +303,12 @@ export default function EventDetail() {
               </div>
             </div>
           </div>
+        </div>
+
+        {/* Real-time indicator */}
+        <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
+          <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+          <span>Auto-refresh every {REFRESH_INTERVAL / 1000} seconds</span>
         </div>
       </div>
     </Layout>

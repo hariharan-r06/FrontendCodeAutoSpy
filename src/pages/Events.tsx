@@ -1,14 +1,15 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { format } from 'date-fns';
-import { Search, Filter, ExternalLink } from 'lucide-react';
+import { Search, Filter, ExternalLink, RefreshCw, AlertTriangle, Activity } from 'lucide-react';
 import { Layout } from '@/components/layout/Layout';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { LoadingState } from '@/components/ui/loading-spinner';
 import { EmptyState } from '@/components/ui/empty-state';
 import { PaginationControls } from '@/components/ui/pagination-controls';
 import { Input } from '@/components/ui/input';
-import { 
+import { Button } from '@/components/ui/button';
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -17,16 +18,8 @@ import {
 } from '@/components/ui/select';
 import { getEvents, Event, Pagination } from '@/lib/api';
 
-const mockEvents: Event[] = [
-  { id: '1', repoFullName: 'acme/frontend', repoOwner: 'acme', repoName: 'frontend', branch: 'main', commitSha: 'abc123def456', status: 'FIXED', errorType: 'SyntaxError', errorMessage: 'Unexpected token', filePath: 'src/index.ts', lineNumber: 42, prUrl: 'https://github.com/acme/frontend/pull/123', confidence: 0.95, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), fixAttempts: [] },
-  { id: '2', repoFullName: 'acme/backend', repoOwner: 'acme', repoName: 'backend', branch: 'develop', commitSha: 'def456ghi789', status: 'ANALYZING', errorType: 'TypeError', errorMessage: 'Cannot read property of undefined', filePath: 'src/api/handler.ts', lineNumber: 128, createdAt: new Date(Date.now() - 3600000).toISOString(), updatedAt: new Date().toISOString(), fixAttempts: [] },
-  { id: '3', repoFullName: 'acme/mobile', repoOwner: 'acme', repoName: 'mobile', branch: 'feature/auth', commitSha: 'ghi789jkl012', status: 'FAILED', errorType: 'ReferenceError', errorMessage: 'Variable is not defined', filePath: 'src/screens/Login.tsx', lineNumber: 56, createdAt: new Date(Date.now() - 7200000).toISOString(), updatedAt: new Date().toISOString(), fixAttempts: [] },
-  { id: '4', repoFullName: 'acme/api', repoOwner: 'acme', repoName: 'api', branch: 'main', commitSha: 'jkl012mno345', status: 'FIXING', errorType: 'ImportError', errorMessage: 'Module not found', filePath: 'src/utils/helpers.ts', lineNumber: 12, createdAt: new Date(Date.now() - 10800000).toISOString(), updatedAt: new Date().toISOString(), fixAttempts: [] },
-  { id: '5', repoFullName: 'acme/dashboard', repoOwner: 'acme', repoName: 'dashboard', branch: 'main', commitSha: 'mno345pqr678', status: 'FIXED', errorType: 'SyntaxError', errorMessage: 'Missing semicolon', filePath: 'src/components/Chart.tsx', lineNumber: 89, prUrl: 'https://github.com/acme/dashboard/pull/45', confidence: 0.88, createdAt: new Date(Date.now() - 14400000).toISOString(), updatedAt: new Date().toISOString(), fixAttempts: [] },
-  { id: '6', repoFullName: 'acme/service', repoOwner: 'acme', repoName: 'service', branch: 'main', commitSha: 'pqr678stu901', status: 'DETECTED', errorType: 'RuntimeError', errorMessage: 'Stack overflow', filePath: 'src/worker.ts', lineNumber: 234, createdAt: new Date(Date.now() - 18000000).toISOString(), updatedAt: new Date().toISOString(), fixAttempts: [] },
-];
-
 const statusOptions = ['ALL', 'FIXED', 'FAILED', 'ANALYZING', 'DETECTED', 'FIXING'];
+const REFRESH_INTERVAL = 10000; // 10 seconds
 
 export default function Events() {
   const navigate = useNavigate();
@@ -34,38 +27,39 @@ export default function Events() {
   const [events, setEvents] = useState<Event[]>([]);
   const [pagination, setPagination] = useState<Pagination>({ page: 1, limit: 10, total: 0, pages: 0 });
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState(searchParams.get('repo') || '');
   const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || 'ALL');
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const fetchEvents = useCallback(async (showRefresh = false) => {
+    try {
+      if (showRefresh) setIsRefreshing(true);
+      const params = {
+        page: parseInt(searchParams.get('page') || '1'),
+        limit: 10,
+        status: statusFilter !== 'ALL' ? statusFilter : undefined,
+        repo: searchQuery || undefined,
+      };
+      const data = await getEvents(params);
+      setEvents(data.events);
+      setPagination(data.pagination);
+      setError(null);
+    } catch (err) {
+      setError('Failed to connect to backend. Make sure CodeAutoSpy server is running.');
+      console.error('Events fetch error:', err);
+    } finally {
+      setLoading(false);
+      setIsRefreshing(false);
+    }
+  }, [searchParams, searchQuery, statusFilter]);
 
   useEffect(() => {
-    const fetchEvents = async () => {
-      setLoading(true);
-      try {
-        const params = {
-          page: parseInt(searchParams.get('page') || '1'),
-          limit: 10,
-          status: statusFilter !== 'ALL' ? statusFilter : undefined,
-          repo: searchQuery || undefined,
-        };
-        const data = await getEvents(params);
-        setEvents(data.events);
-        setPagination(data.pagination);
-      } catch {
-        // Use mock data
-        const filtered = mockEvents.filter(e => {
-          const matchesSearch = !searchQuery || e.repoFullName.toLowerCase().includes(searchQuery.toLowerCase());
-          const matchesStatus = statusFilter === 'ALL' || e.status === statusFilter;
-          return matchesSearch && matchesStatus;
-        });
-        setEvents(filtered);
-        setPagination({ page: 1, limit: 10, total: filtered.length, pages: 1 });
-      } finally {
-        setLoading(false);
-      }
-    };
-
+    setLoading(true);
     fetchEvents();
-  }, [searchParams, searchQuery, statusFilter]);
+    const interval = setInterval(() => fetchEvents(false), REFRESH_INTERVAL);
+    return () => clearInterval(interval);
+  }, [fetchEvents]);
 
   const handlePageChange = (page: number) => {
     setSearchParams({ page: String(page), status: statusFilter, repo: searchQuery });
@@ -81,13 +75,44 @@ export default function Events() {
     setSearchParams({ page: '1', status: value, repo: searchQuery });
   };
 
+  const handleManualRefresh = () => {
+    fetchEvents(true);
+  };
+
+  if (error) {
+    return (
+      <Layout>
+        <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-4">
+          <AlertTriangle className="w-16 h-16 text-yellow-500" />
+          <h2 className="text-xl font-semibold text-foreground">Connection Error</h2>
+          <p className="text-muted-foreground text-center max-w-md">{error}</p>
+          <Button onClick={handleManualRefresh} variant="outline">
+            <RefreshCw className="w-4 h-4 mr-2" />
+            Retry
+          </Button>
+        </div>
+      </Layout>
+    );
+  }
+
   return (
     <Layout>
       <div className="space-y-6">
         {/* Header */}
-        <div>
-          <h1 className="text-3xl font-bold text-foreground">Events</h1>
-          <p className="text-muted-foreground mt-1">Track CI/CD failure events and their status</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-foreground">Events</h1>
+            <p className="text-muted-foreground mt-1">Track CI/CD failure events and their status</p>
+          </div>
+          <Button
+            onClick={handleManualRefresh}
+            variant="outline"
+            size="sm"
+            disabled={isRefreshing}
+          >
+            <RefreshCw className={`w-4 h-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
         </div>
 
         {/* Filters */}
@@ -120,10 +145,13 @@ export default function Events() {
         {loading ? (
           <LoadingState message="Loading events..." />
         ) : events.length === 0 ? (
-          <EmptyState 
-            title="No events found" 
-            description="No events match your current filters."
-          />
+          <div className="glass-card p-12 text-center">
+            <Activity className="w-16 h-16 mx-auto mb-4 text-muted-foreground opacity-50" />
+            <h3 className="text-lg font-semibold text-foreground mb-2">No events yet</h3>
+            <p className="text-muted-foreground max-w-md mx-auto">
+              Push code with a CI/CD failure to see events here. The system will automatically detect and attempt to fix failures.
+            </p>
+          </div>
         ) : (
           <div className="glass-card overflow-hidden">
             <div className="overflow-x-auto">
@@ -140,8 +168,8 @@ export default function Events() {
                 </thead>
                 <tbody>
                   {events.map((event, idx) => (
-                    <tr 
-                      key={event.id} 
+                    <tr
+                      key={event.id}
                       className="border-b border-border/50 hover:bg-muted/20 cursor-pointer transition-colors animate-fade-in"
                       style={{ animationDelay: `${idx * 50}ms` }}
                       onClick={() => navigate(`/events/${event.id}`)}
@@ -149,14 +177,14 @@ export default function Events() {
                       <td className="p-4">
                         <div>
                           <span className="text-sm font-medium text-foreground">{event.repoFullName}</span>
-                          <span className="block text-xs text-muted-foreground font-mono">{event.commitSha.slice(0, 7)}</span>
+                          <span className="block text-xs text-muted-foreground font-mono">{event.commitSha?.slice(0, 7) || 'N/A'}</span>
                         </div>
                       </td>
                       <td className="p-4">
                         <span className="text-sm text-foreground">{event.branch}</span>
                       </td>
                       <td className="p-4">
-                        <span className="text-sm text-muted-foreground">{event.errorType}</span>
+                        <span className="text-sm text-muted-foreground">{event.errorType || 'Unknown'}</span>
                       </td>
                       <td className="p-4">
                         <StatusBadge status={event.status} />
@@ -185,6 +213,12 @@ export default function Events() {
             onPageChange={handlePageChange}
           />
         )}
+
+        {/* Real-time indicator */}
+        <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
+          <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+          <span>Auto-refresh every {REFRESH_INTERVAL / 1000} seconds</span>
+        </div>
       </div>
     </Layout>
   );
